@@ -1,0 +1,36 @@
+[project]
+name = "yz-transcript"      # dist name; import package is "yz_transcript"
+version = "0.0.1"
+description = "Transcript satellite — day-keyed JSONL store + multilingual semantic-search index for ambient voice transcripts. Text-in / text-out; audio capture stays in the caller (JarvYZ)."
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "numpy>=1.24",
+    # Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2). Same model
+    # the in-tree pipeline.transcript_search used pre-migration, so the
+    # existing .index.npz cache loads without re-encoding.
+    "sentence-transformers>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "httpx>=0.25", "ruff>=0.4"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["yz_transcript*"]
+
+# Ship the bundled SPA assets so a `pip install yz-transcript` user
+# gets a working UI at http://127.0.0.1:9004/ — no separate npm build
+# needed at install time. Built by `cd ui && npm run build:pages`
+# BEFORE the wheel build; vite outputs into yz_transcript/static/.
+[tool.setuptools.package-data]
+yz_transcript = [
+    "static/*",
+    "static/**/*",
+]

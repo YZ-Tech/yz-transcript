@@ -1,0 +1,66 @@
+{
+  "id": "transcript",
+  "name": "Memory",
+  "version": "0.0.1",
+  "enabled": true,
+  "nav": {
+    "label": "Memory",
+    "icon": "history",
+    "to": "/transcript"
+  },
+  "dashboards": [],
+  "exports": [
+    { "id": "TranscriptPage", "type": "component" }
+  ],
+  "settings": {
+    "retention_days_text": {
+      "type": "int",
+      "default": 0,
+      "label": "Text retention (days)",
+      "description": "Days to keep transcript JSONL entries before pruning. 0 = forever."
+    }
+  },
+  "service": {
+    "url": "http://127.0.0.1:9004",
+    "settingPath": "transcript.satellite_url"
+  },
+  "tools": [
+    {
+      "name": "search_transcript",
+      "endpoint": "/tools/search_transcript",
+      "section": "transcript_search",
+      "speakable": false,
+      "kind": "query",
+      "description": "Semantic search over the user's ambient voice transcript history. Use when the user asks 'what did I say about X', 'when did I mention Y', 'did I talk about Z yesterday' — any question about their own prior speech, in any language they speak (EN or DE). Synthesize the matched lines into a natural spoken summary; cite approximate times if useful. Do NOT use this for the general web (use web_search) or for the assistant's own past turns.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to search for, paraphrased naturally."
+          },
+          "since_iso": {
+            "type": "string",
+            "description": "Optional ISO 8601 datetime (e.g. '2026-05-28T00:00:00') — only return entries on or after this moment."
+          },
+          "until_iso": {
+            "type": "string",
+            "description": "Optional ISO 8601 datetime upper bound."
+          },
+          "language": {
+            "type": "string",
+            "enum": ["en", "de"],
+            "description": "Optional — restrict to one language."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}
