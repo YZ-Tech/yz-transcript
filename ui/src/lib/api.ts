@@ -35,7 +35,8 @@ export interface TranscriptApi {
   // Mutations
   enable(): Promise<{ ok: boolean; error?: string }>
   disable(): Promise<{ ok: boolean; error?: string }>
-  pause(hours: number): Promise<{ ok: boolean; error?: string }>
+  /** Indefinite pause (the timed snooze was removed 2026-07-01). */
+  pause(): Promise<{ ok: boolean; error?: string }>
   resume(): Promise<{ ok: boolean; error?: string }>
   forget(minutes: number): Promise<{ ok: boolean; error?: string; data?: unknown }>
   prune(): Promise<{ ok: boolean; error?: string; data?: unknown }>
@@ -164,8 +165,6 @@ export function createSatelliteApi(
         enabled: false,       // standalone mode = no JarvYZ = no capture
         running: false,
         paused: false,
-        pause_until: 0,
-        paused_remaining_seconds: 0,
         retention: { text_days: sat.retention.text_days, audio_days: 0 },
         satellite: {
           today_count: sat.today_count,
@@ -224,13 +223,15 @@ export function createJarvYZApi(): TranscriptApi {
       if (limit) params.set('limit', String(limit))
       return getJson<SearchResponse>(`/api/transcript/search?${params}`)
     },
-    enable: () => postEmpty('/api/transcript/enable'),
-    disable: () => postEmpty('/api/transcript/disable'),
-    pause: (hours) => postJson('/api/transcript/pause', { hours }).then((r) => ({
-      ok: r.ok,
-      error: r.error,
-    })),
-    resume: () => postEmpty('/api/transcript/resume'),
+    // Power collapsed into the generic satellite-power endpoint (on/paused/off).
+    enable: () => postJson('/api/satellites/power', { id: 'transcript', state: 'on' })
+      .then((r) => ({ ok: r.ok, error: r.error })),
+    disable: () => postJson('/api/satellites/power', { id: 'transcript', state: 'off' })
+      .then((r) => ({ ok: r.ok, error: r.error })),
+    pause: () => postJson('/api/satellites/power', { id: 'transcript', state: 'paused' })
+      .then((r) => ({ ok: r.ok, error: r.error })),
+    resume: () => postJson('/api/satellites/power', { id: 'transcript', state: 'on' })
+      .then((r) => ({ ok: r.ok, error: r.error })),
     forget: (minutes) => postJson('/api/transcript/forget', { minutes }),
     prune: () => postEmpty('/api/transcript/prune'),
     deleteEntry: (day, ts) =>

@@ -1,7 +1,7 @@
 {
   "name": "yz-transcript-ui",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "description": "Transcript satellite UI — shipped as react-dynamic-module IIFE for JarvYZ, also buildable as a standalone SPA served by the satellite at /.",
   "scripts": {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Alert,
   Box,
@@ -29,26 +29,6 @@ export function StateWidget({
   const caps = useCapabilities()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [remaining, setRemaining] = useState(state.paused_remaining_seconds)
-
-  // Live countdown of pause-remaining, decrements once per second.
-  useEffect(() => {
-    if (!state.paused) {
-      setRemaining(0)
-      return
-    }
-    setRemaining(state.paused_remaining_seconds)
-    const id = window.setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          onChanged()
-          return 0
-        }
-        return r - 1
-      })
-    }, 1000)
-    return () => window.clearInterval(id)
-  }, [state.paused, state.paused_remaining_seconds, onChanged])
 
   const handleToggle = async () => {
     setBusy(true)
@@ -59,10 +39,10 @@ export function StateWidget({
     else onChanged()
   }
 
-  const handlePause = async (hours: number) => {
+  const handlePause = async () => {
     setBusy(true)
     setError(null)
-    const r = await api.pause(hours)
+    const r = await api.pause()
     setBusy(false)
     if (!r.ok) setError(r.error || 'failed')
     else onChanged()
@@ -109,7 +89,7 @@ export function StateWidget({
           )}
           {state.paused && (
             <Chip
-              label={`paused · ${formatRemaining(remaining)}`}
+              label="paused"
               size="small"
               color="warning"
               icon={<PauseIcon sx={{ fontSize: 14 }} />}
@@ -167,15 +147,15 @@ export function StateWidget({
       {state.enabled && !standalone && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           {!state.paused ? (
-            <>
-              <Typography variant="caption" color="text.secondary">
-                Pause for:
-              </Typography>
-              <Button size="small" onClick={() => handlePause(1)} disabled={busy}>1h</Button>
-              <Button size="small" onClick={() => handlePause(4)} disabled={busy}>4h</Button>
-              <Button size="small" onClick={() => handlePause(8)} disabled={busy}>8h</Button>
-              <Button size="small" onClick={() => handlePause(24)} disabled={busy}>24h</Button>
-            </>
+            <Button
+              size="small"
+              startIcon={<PauseIcon />}
+              onClick={handlePause}
+              disabled={busy}
+              variant="outlined"
+            >
+              Pause
+            </Button>
           ) : (
             <Button
               size="small"
@@ -184,7 +164,7 @@ export function StateWidget({
               disabled={busy}
               variant="outlined"
             >
-              Resume now
+              Resume
             </Button>
           )}
         </Stack>
@@ -202,15 +182,4 @@ export function StateWidget({
       )}
     </Box>
   )
-}
-
-function formatRemaining(seconds: number): string {
-  if (seconds <= 0) return '0s'
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`
-  const h = Math.floor(m / 60)
-  const rm = m % 60
-  return rm > 0 ? `${h}h ${rm}m` : `${h}h`
 }

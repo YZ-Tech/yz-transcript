@@ -15,8 +15,6 @@ const DEFAULT_STATE: TranscriptState = {
   enabled: false,
   running: false,
   paused: false,
-  pause_until: 0,
-  paused_remaining_seconds: 0,
   retention: { text_days: 0, audio_days: 30 },
 }
 

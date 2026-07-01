@@ -1,7 +1,7 @@
 {
   "id": "transcript",
   "name": "Memory",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "enabled": true,
   "nav": {
     "label": "Memory",
@@ -10,7 +10,10 @@
   },
   "dashboards": [],
   "exports": [
-    { "id": "TranscriptPage", "type": "component" }
+    {
+      "id": "TranscriptPage",
+      "type": "component"
+    }
   ],
   "settings": {
     "retention_days_text": {
@@ -31,7 +34,14 @@
       "timeoutS": 30
     },
     "events": {
-      "channel": "transcript"
+      "channels": [
+        "transcript"
+      ]
+    },
+    "power": {
+      "driver": "runtime",
+      "default": "off",
+      "autostart": true
     }
   },
   "tools": [
@@ -41,7 +51,7 @@
       "section": "transcript_search",
       "speakable": false,
       "kind": "query",
-      "description": "Semantic search over the user's ambient voice transcript history. Use when the user asks 'what did I say about X', 'when did I mention Y', 'did I talk about Z yesterday' — any question about their own prior speech, in any language they speak (EN or DE). Synthesize the matched lines into a natural spoken summary; cite approximate times if useful. Do NOT use this for the general web (use web_search) or for the assistant's own past turns.",
+      "description": "Semantic search over the user's ambient voice transcript history. Use when the user asks 'what did I say about X', 'when did I mention Y', 'did I talk about Z yesterday' \u2014 any question about their own prior speech, in any language they speak (EN or DE). Synthesize the matched lines into a natural spoken summary; cite approximate times if useful. Do NOT use this for the general web (use web_search) or for the assistant's own past turns.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -51,7 +61,7 @@
           },
           "since_iso": {
             "type": "string",
-            "description": "Optional ISO 8601 datetime (e.g. '2026-05-28T00:00:00') — only return entries on or after this moment."
+            "description": "Optional ISO 8601 datetime (e.g. '2026-05-28T00:00:00') \u2014 only return entries on or after this moment."
           },
           "until_iso": {
             "type": "string",
@@ -59,8 +69,11 @@
           },
           "language": {
             "type": "string",
-            "enum": ["en", "de"],
-            "description": "Optional — restrict to one language."
+            "enum": [
+              "en",
+              "de"
+            ],
+            "description": "Optional \u2014 restrict to one language."
           },
           "limit": {
             "type": "integer",
@@ -69,8 +82,16 @@
             "default": 5
           }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     }
-  ]
+  ],
+  "requires": {
+    "network": "setup",
+    "sensors": [
+      "mic"
+    ]
+  }
 }

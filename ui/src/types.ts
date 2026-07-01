@@ -8,8 +8,6 @@ export type TranscriptState = {
   enabled: boolean
   running: boolean
   paused: boolean
-  pause_until: number
-  paused_remaining_seconds: number
   retention: {
     text_days: number
     audio_days: number
