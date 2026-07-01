@@ -212,7 +212,7 @@ export function createJarvYZApi(): TranscriptApi {
   return {
     list: (day, limit) =>
       getJson<TranscriptListResponse>(
-        `/api/transcript?limit=${limit}` + (day ? `&day=${day}` : ''),
+        `/api/transcript/entries?limit=${limit}` + (day ? `&day=${day}` : ''),
       ),
     days: () => getJson<{ days: TranscriptDay[] }>('/api/transcript/days').then((d) => d.days || []),
     state: () => getJson<TranscriptState>('/api/transcript/state'),
