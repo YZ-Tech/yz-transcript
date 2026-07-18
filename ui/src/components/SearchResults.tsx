@@ -1,9 +1,10 @@
-import { Box, Chip, CircularProgress, Stack, Typography } from '@mui/material'
+import { Box, CircularProgress, Stack, Typography } from '@mui/material'
 import type { SearchHit } from '../types'
 
-/** Semantic search results — chronologically-tagged with score chip.
- *  Click a hit → ideally jump to that day in the day-picker; for now
- *  surfaces the day as a chip so the user can navigate manually.
+/** Semantic search results — same quiet timeline rows as EntryList
+ *  (2026-07-10 redesign): text leads, a compact day+time gutter left,
+ *  lang · score as a muted right-hand caption. Was: one bordered card per
+ *  hit fronted by a row of chips.
  *
  *  Renders distinct searching / error / warming / no-match states so an
  *  in-flight search never masquerades as "No matches". */
@@ -57,61 +58,44 @@ export function SearchResults({
     )
   }
   return (
-    <Stack spacing={0.75}>
+    <Box>
       {hits.map((h) => (
         <HitRow key={`${h.day}-${h.ts}`} hit={h} />
       ))}
-    </Stack>
+    </Box>
   )
 }
 
 function HitRow({ hit }: { hit: SearchHit }) {
-  const when = new Date(hit.ts * 1000).toLocaleString('en-GB', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const d = new Date(hit.ts * 1000)
+  const when =
+    d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }) +
+    ' ' +
+    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   return (
     <Box
       sx={{
-        p: 1.25,
-        border: 1,
-        borderColor: 'divider',
+        display: 'grid',
+        gridTemplateColumns: '96px 1fr auto',
+        alignItems: 'center',
+        columnGap: 1.5,
+        px: 1,
+        py: 0.25,
         borderRadius: 1,
-        bgcolor: 'background.paper',
+        transition: 'background-color .15s ease',
+        '&:hover': { bgcolor: 'action.hover' },
       }}
     >
-      <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
-        <Chip
-          label={hit.day}
-          size="small"
-          variant="outlined"
-          sx={{ height: 18, fontSize: '0.6rem' }}
-        />
-        <Typography
-          variant="caption"
-          sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.disabled' }}
-        >
-          {when}
-        </Typography>
-        <Chip
-          label={(hit.language || '?').toUpperCase()}
-          size="small"
-          variant="outlined"
-          sx={{ height: 18, fontSize: '0.6rem' }}
-        />
-        <Chip
-          label={`score ${hit.score.toFixed(2)}`}
-          size="small"
-          color={hit.score > 0.5 ? 'success' : hit.score > 0.2 ? 'default' : 'warning'}
-          variant="outlined"
-          sx={{ height: 18, fontSize: '0.6rem' }}
-        />
-      </Stack>
-      <Typography variant="body2" sx={{ pl: 0.5, fontFamily: 'Georgia, serif' }}>
-        {hit.text}
+      <Typography
+        variant="caption"
+        sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.disabled' }}
+        title={hit.day}
+      >
+        {when}
+      </Typography>
+      <Typography variant="body2">{hit.text}</Typography>
+      <Typography variant="caption" color="text.disabled">
+        {(hit.language || '?').toLowerCase()} · {hit.score.toFixed(2)}
       </Typography>
     </Box>
   )

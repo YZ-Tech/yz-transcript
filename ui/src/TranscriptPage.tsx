@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
+  ClickAwayListener,
+  Collapse,
+  IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
@@ -22,7 +25,18 @@ import {
   useCapabilities,
 } from './lib/capabilities'
 
-import { StateWidget } from './components/StateWidget'
+import { ConfirmDialog } from './components/ConfirmDialog'
+import { StatusStrip } from './components/StatusStrip'
+
+/** Toolbar icon buttons match the row's 40px control height and wear the
+ *  same outline as the fields/toggles, so the line reads as one family. */
+const TOOLBAR_ICON_SX = {
+  width: 40,
+  height: 40,
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: 1,
+} as const
 import { EntryList } from './components/EntryList'
 import { SearchBar } from './components/SearchBar'
 import { SearchResults } from './components/SearchResults'
@@ -91,6 +105,9 @@ function TranscriptPageInner() {
   const [forgetMinutes, setForgetMinutes] = useState<number>(5)
   const [forgetBusy, setForgetBusy] = useState(false)
   const [forgetMsg, setForgetMsg] = useState<string | null>(null)
+  // The minutes input hides behind the forget icon (horizontal collapse):
+  // first click arms + reveals, second click fires, click-away disarms.
+  const [forgetOpen, setForgetOpen] = useState(false)
 
   // Search state, owned here so the EntryList / SearchResults swap
   // is driven by one source of truth.
@@ -126,18 +143,23 @@ function TranscriptPageInner() {
     refreshAll()
   })
 
+  // Power flips from the HOST header (core SubsystemHeader → POST
+  // /api/satellites/power) ride the `satellite_power` event, not the
+  // `transcript` channel — without this the strip showed the old state
+  // until the next tab-focus refresh (2026-07-10).
+  useSubscription<{ id?: string }>('satellite_power', (d) => {
+    if (d.id === 'transcript') void refreshState()
+  })
+
+  // Armed by the second click on the forget icon; the themed
+  // ConfirmDialog (below) fires handleForget on confirm.
+  const [confirmForget, setConfirmForget] = useState(false)
   const handleForget = async () => {
-    if (
-      !confirm(
-        `Drop transcript entries (and their audio) from the last ${forgetMinutes} minutes? Cannot be undone.`,
-      )
-    ) {
-      return
-    }
     setForgetBusy(true)
     setForgetMsg(null)
     const r = await api.forget(forgetMinutes)
     setForgetBusy(false)
+    setForgetOpen(false)
     if (!r.ok) {
       setForgetMsg(`Failed: ${r.error}`)
     } else {
@@ -164,91 +186,104 @@ function TranscriptPageInner() {
   }, [entries, keywordQuery])
 
   return (
-    <Box>
-      <Stack direction="row" sx={{ alignItems: 'center', mb: 2, gap: 1 }}>
-        <Typography variant="h5" sx={{ flex: 1 }}>
-          Memory
-        </Typography>
-        <Button startIcon={<RefreshIcon />} onClick={refreshAll} size="small">
-          Refresh
-        </Button>
+    <Stack sx={{ gap: 2 }}>
+      <StatusStrip state={state} onChanged={refreshState} />
+
+      {/* ONE toolbar row (2026-07-10 restyle): search left, day + forget +
+          refresh right, wrapping on narrow. Was two stacked rows. */}
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <SearchBar
+          onKeywordChange={setKeywordQuery}
+          onResults={setSemanticHits}
+          onClear={() => setSemanticHits(null)}
+          onSearchState={setSearchState}
+        />
+        {!isSemantic && (
+          <>
+            <TextField
+              select
+              label="Day"
+              size="small"
+              value={day}
+              onChange={(e) => setDay(e.target.value)}
+              sx={{ minWidth: 170 }}
+            >
+              {dayOptions.map((d) => (
+                <MenuItem key={d} value={d}>
+                  {d}
+                  {d === today && ' (today)'}
+                </MenuItem>
+              ))}
+            </TextField>
+            {state.enabled && caps.deployTarget === 'jarvis' && (
+              <ClickAwayListener onClickAway={() => setForgetOpen(false)}>
+                <Stack direction="row" sx={{ alignItems: 'center' }}>
+                  <Collapse in={forgetOpen} orientation="horizontal">
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Minutes"
+                      value={forgetMinutes}
+                      onChange={(e) =>
+                        setForgetMinutes(Math.max(1, parseInt(e.target.value) || 5))
+                      }
+                      sx={{ width: 96, mr: 1 }}
+                    />
+                  </Collapse>
+                  <Tooltip
+                    title={
+                      forgetOpen
+                        ? `Forget the last ${forgetMinutes} min of entries + audio — cannot be undone`
+                        : 'Forget recent minutes…'
+                    }
+                  >
+                    <IconButton
+                      onClick={() => (forgetOpen ? setConfirmForget(true) : setForgetOpen(true))}
+                      disabled={forgetBusy}
+                      color={forgetOpen ? 'error' : 'default'}
+                      sx={TOOLBAR_ICON_SX}
+                    >
+                      <DeleteSweepIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </ClickAwayListener>
+            )}
+            <ConfirmDialog
+              open={confirmForget}
+              title="Forget recent entries"
+              message={`Drop transcript entries (and their audio) from the last ${forgetMinutes} minutes? Cannot be undone.`}
+              confirmLabel="Forget"
+              onConfirm={() => void handleForget()}
+              onClose={() => setConfirmForget(false)}
+            />
+          </>
+        )}
+        <Tooltip title="Refresh">
+          <IconButton onClick={refreshAll} sx={TOOLBAR_ICON_SX}>
+            <RefreshIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Stack>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Long-term memory from ambient capture. When enabled in JarvYZ, every
-        speech segment Silero VAD picks up gets transcribed (faster-whisper
-        large-v3 multilingual, auto-detect) and persisted here as searchable
-        text. The semantic index runs across all stored history — keyword for
-        fast filtering, semantic for "what did I say about X" across days +
-        languages.
-      </Typography>
-
-      <StateWidget state={state} onChanged={refreshState} />
-
-      <SearchBar
-        onKeywordChange={setKeywordQuery}
-        onResults={setSemanticHits}
-        onClear={() => setSemanticHits(null)}
-        onSearchState={setSearchState}
-      />
-
-      {!isSemantic && (
-        <Stack direction="row" sx={{ alignItems: 'center', mb: 2, gap: 1.5 }}>
-          <TextField
-            select
-            label="Day"
-            size="small"
-            value={day}
-            onChange={(e) => setDay(e.target.value)}
-            sx={{ minWidth: 200 }}
-          >
-            {dayOptions.map((d) => (
-              <MenuItem key={d} value={d}>
-                {d}
-                {d === today && ' (today)'}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Typography variant="caption" color="text.secondary">
-            {keywordQuery.trim()
-              ? `${filteredEntries.length} of ${totalDay} entries match`
-              : `${totalDay} entries on disk for this day`}
-            {!keywordQuery.trim() && entries.length < totalDay
-              ? ` (showing ${entries.length} most recent)`
-              : null}
-          </Typography>
-          <Box sx={{ flex: 1 }} />
-          {state.enabled && caps.deployTarget === 'jarvis' && (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <TextField
-                size="small"
-                type="number"
-                label="Forget last (min)"
-                value={forgetMinutes}
-                onChange={(e) =>
-                  setForgetMinutes(Math.max(1, parseInt(e.target.value) || 5))
-                }
-                sx={{ width: 130 }}
-              />
-              <Button
-                size="small"
-                color="error"
-                startIcon={<DeleteSweepIcon />}
-                onClick={handleForget}
-                disabled={forgetBusy}
-              >
-                Forget
-              </Button>
-            </Stack>
-          )}
-        </Stack>
+      {/* Count caption only while a filter is ACTIVE (it describes the
+          filter). The unfiltered "N entries on disk" duplicated the feed's
+          own empty state ("No entries for this day") — same info, twice on
+          screen (Yeon, 2026-07-10). The truncation note stays: it's the one
+          fact the feed can't show about itself. */}
+      {!isSemantic && keywordQuery.trim() && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: -1.5 }}>
+          {`${filteredEntries.length} of ${totalDay} entries match`}
+        </Typography>
+      )}
+      {!isSemantic && !keywordQuery.trim() && entries.length < totalDay && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: -1.5 }}>
+          {`showing the ${entries.length} most recent of ${totalDay} entries`}
+        </Typography>
       )}
 
       {forgetMsg && (
-        <Alert
-          severity={forgetMsg.startsWith('Failed') ? 'error' : 'info'}
-          sx={{ mb: 2 }}
-        >
+        <Alert severity={forgetMsg.startsWith('Failed') ? 'error' : 'info'}>
           {forgetMsg}
         </Alert>
       )}
@@ -267,6 +302,6 @@ function TranscriptPageInner() {
       ) : (
         <EntryList day={day} entries={filteredEntries} onAfterDelete={refreshEntries} />
       )}
-    </Box>
+    </Stack>
   )
 }

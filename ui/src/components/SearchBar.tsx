@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Box,
-  Chip,
   CircularProgress,
   IconButton,
   InputAdornment,
   MenuItem,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -98,39 +99,37 @@ export function SearchBar({
   }
 
   return (
-    <Box sx={{ mb: 2 }}>
+    // Flex item inside the page's single toolbar row (the parent owns
+    // spacing); grows to eat the free width, wraps as one unit on narrow.
+    <Box sx={{ flex: '1 1 320px', minWidth: 280 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Stack
-          direction="row"
-          spacing={0.5}
-          sx={{
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 1,
-            p: 0.25,
-          }}
+        {/* House idiom for mode switches (Brain engine selector, UI/Code
+            toggle) — was chips faking a toggle group. Height matches the
+            small TextFields so the toolbar reads as one line. */}
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={mode}
+          onChange={(_, v) => v && setMode(v)}
+          sx={{ '& .MuiToggleButton-root': { px: 1.25, height: 40 } }}
         >
-          <Tooltip title="Fast substring match over the loaded day">
-            <Chip
-              icon={<FlashOnIcon sx={{ fontSize: 14 }} />}
-              label="keyword"
-              size="small"
-              color={mode === 'keyword' ? 'primary' : 'default'}
-              variant={mode === 'keyword' ? 'filled' : 'outlined'}
-              onClick={() => setMode('keyword')}
-            />
-          </Tooltip>
-          <Tooltip title="Multilingual semantic search across all history">
-            <Chip
-              icon={<PsychologyIcon sx={{ fontSize: 14 }} />}
-              label="semantic"
-              size="small"
-              color={mode === 'semantic' ? 'primary' : 'default'}
-              variant={mode === 'semantic' ? 'filled' : 'outlined'}
-              onClick={() => setMode('semantic')}
-            />
-          </Tooltip>
-        </Stack>
+          <ToggleButton value="keyword">
+            <Tooltip title="Fast substring match over the loaded day">
+              <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+                <FlashOnIcon sx={{ fontSize: 16 }} />
+                keyword
+              </Stack>
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="semantic">
+            <Tooltip title="Multilingual semantic search across all history">
+              <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5 }}>
+                <PsychologyIcon sx={{ fontSize: 16 }} />
+                semantic
+              </Stack>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
 
         <TextField
           size="small"

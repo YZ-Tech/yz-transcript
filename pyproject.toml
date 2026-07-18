@@ -1,6 +1,6 @@
 [project]
 name = "yz-transcript"      # dist name; import package is "yz_transcript"
-version = "0.0.4"
+version = "0.0.5"
 description = "Transcript satellite — day-keyed JSONL store + multilingual semantic-search index for ambient voice transcripts. Text-in / text-out; audio capture stays in the caller (JarvYZ)."
 requires-python = ">=3.10,<3.13"
 license = { text = "MIT" }

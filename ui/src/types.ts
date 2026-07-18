@@ -5,6 +5,8 @@
 // fetches don't need to change.
 
 export type TranscriptState = {
+  /** Raw power intent (JarvYZ-side proxy adds it; absent standalone). */
+  power?: 'on' | 'paused' | 'off'
   enabled: boolean
   running: boolean
   paused: boolean
