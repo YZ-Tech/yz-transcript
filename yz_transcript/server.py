@@ -351,7 +351,8 @@ def main() -> None:
     import uvicorn
 
     host = os.environ.get("TRANSCRIPT_HOST", "127.0.0.1")
-    port = int(os.environ.get("TRANSCRIPT_PORT", "9004"))
+    # YZ_PORT (core-resolved, settings.ports) wins; TRANSCRIPT_PORT + default for standalone.
+    port = int(os.environ.get("YZ_PORT") or os.environ.get("TRANSCRIPT_PORT") or "9004")
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
