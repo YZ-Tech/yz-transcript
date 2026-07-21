@@ -15,7 +15,11 @@ Lifecycle:
     cache, backfills any new JSONL entries via `core.store.iter_all_entries`,
     marks the index ready.
   - `index_entry(...)` is called by server.py after every successful
-    POST /entries — appends one embedding + saves cache.
+    POST /entries — appends one embedding in memory and schedules a
+    debounced cache flush (a per-entry `np.savez` of the WHOLE matrix
+    was O(N^2) lifetime disk writes). The JSONL stays the source of
+    truth: entries missed by a crash before a flush are backfilled by
+    the next `initialize()`.
   - `search(...)` runs cosine sim over the in-memory matrix with
     optional since/until/language filters.
 
@@ -36,6 +40,8 @@ from . import store
 
 _MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 _DIM = 384
+# Seconds of quiet before pending index entries are written to disk.
+_FLUSH_DEBOUNCE_S = 30.0
 
 
 def _cache_path() -> Path:
@@ -59,6 +65,9 @@ class TranscriptIndex:
         self._embeddings: np.ndarray = np.zeros((0, _DIM), dtype=np.float32)
         self._entries: list[dict] = []
         self._loaded = False
+        # Debounced cache flush (see index_entry).
+        self._dirty = False
+        self._flush_timer: threading.Timer | None = None
 
     # ── public ────────────────────────────────────────────────────
 
@@ -114,7 +123,13 @@ class TranscriptIndex:
         audio_path: str | None = None,
     ) -> None:
         """Append one entry's embedding. No-op if index not loaded yet —
-        the next `initialize()` call will pick the entry up off disk."""
+        the next `initialize()` call will pick the entry up off disk.
+
+        Disk flush is debounced: `np.savez` rewrites the ENTIRE matrix
+        (npz has no append), so saving per entry was O(N) writes per
+        utterance -> O(N^2) lifetime SSD wear. Losing an unflushed tail
+        on a crash is safe — the JSONL is the source of truth and
+        `initialize()` backfills."""
         if not text.strip():
             return
         with self._lock:
@@ -130,9 +145,32 @@ class TranscriptIndex:
                     "language": language,
                     "audio_path": audio_path,
                 })
-                self._save_cache_locked()
+                self._dirty = True
+                if self._flush_timer is None:
+                    t = threading.Timer(_FLUSH_DEBOUNCE_S, self._flush_debounced)
+                    t.daemon = True
+                    self._flush_timer = t
+                    t.start()
             except Exception as e:  # noqa: BLE001
                 _log(f"index_entry error: {e}")
+
+    def _flush_debounced(self) -> None:
+        with self._lock:
+            self._flush_timer = None
+            if self._dirty:
+                self._dirty = False
+                self._save_cache_locked()
+
+    def flush(self) -> None:
+        """Force-write any pending entries. Called at server shutdown so
+        a clean exit never relies on the backfill path."""
+        with self._lock:
+            if self._flush_timer is not None:
+                self._flush_timer.cancel()
+                self._flush_timer = None
+            if self._dirty:
+                self._dirty = False
+                self._save_cache_locked()
 
     def search(
         self,

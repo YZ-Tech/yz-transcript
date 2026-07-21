@@ -61,6 +61,9 @@ async def _lifespan(_app: FastAPI):
         daemon=True,
     ).start()
     yield
+    # Clean exit: write any index entries still waiting on the debounce
+    # timer (crash path is covered by initialize()'s JSONL backfill).
+    transcript_index.get().flush()
 
 app = FastAPI(title="transcript", version=__version__, lifespan=_lifespan)
 
