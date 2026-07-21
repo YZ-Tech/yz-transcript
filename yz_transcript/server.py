@@ -28,22 +28,41 @@ The caller's "is capture running / paused" projection layers on top of
 this in the JarvYZ-side proxy."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import asyncio
 import re
 import sys
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, observer
+from yz_satellite_common import make_events_router, run_server
 from . import persistent_settings as _persist  # noqa: F401 — load() runs on import
 from .core import index as transcript_index
 from .core import store
 from .settings import settings
 
 
-app = FastAPI(title="transcript", version=__version__)
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # was @app.on_event("startup") — deprecated in favor of lifespan.
+    # Kick the search index's heavy backfill off the request path:
+    # init() creates the singleton synchronously (cheap); initialize()
+    # loads the model + backfills (~5-10s cold) on a thread so health
+    # checks and the first /entries POSTs aren't blocked by model load.
+    transcript_index.init()
+    import threading
+    threading.Thread(
+        target=transcript_index.get().initialize,
+        name="transcript-index-init",
+        daemon=True,
+    ).start()
+    yield
+
+app = FastAPI(title="transcript", version=__version__, lifespan=_lifespan)
 
 
 _DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -55,23 +74,6 @@ def _validate_day(day: str) -> None:
 
 
 # ─────────────────────────── lifecycle ────────────────────────────
-
-
-@app.on_event("startup")
-async def _startup() -> None:
-    """Kick the search index's heavy backfill off the request path.
-
-    `init()` creates the singleton synchronously (cheap); `initialize()`
-    loads the model + backfills any new JSONL entries (~5–10 s cold +
-    a few ms per new entry). We run it on a thread so health checks
-    and the first /entries POSTs aren't blocked by model load."""
-    transcript_index.init()
-    import threading
-    threading.Thread(
-        target=transcript_index.get().initialize,
-        name="transcript-index-init",
-        daemon=True,
-    ).start()
 
 
 # ─────────────────────────── liveness ────────────────────────────
@@ -307,24 +309,9 @@ def tools_search_transcript(body: dict = Body(default_factory=dict)) -> dict:
 # ─────────────────────────── events WS ────────────────────────────
 
 
-@app.websocket("/events")
-async def events_ws(ws: WebSocket) -> None:
-    """Server → client push of transcript events. Initial frame is a
-    `hello` so the client knows the channel is live without waiting for
-    the first mutation."""
-    await ws.accept()
-    q = observer.subscribe()
-    try:
-        await ws.send_json({"event": "transcript", "kind": "hello"})
-        while True:
-            msg = await q.get()
-            await ws.send_json(msg)
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
-    finally:
-        observer.unsubscribe(q)
+# The /events WS endpoint (hello frame + queue pump) is the shared router
+# from yz-satellite-common — one body instead of a per-satellite copy.
+app.include_router(make_events_router(observer.broadcaster))
 
 
 # ─────────────────────────── SPA mount ────────────────────────────
@@ -347,13 +334,7 @@ app.mount(
 
 def main() -> None:
     """`python -m yz_transcript` entry point."""
-    import os
-    import uvicorn
-
-    host = os.environ.get("TRANSCRIPT_HOST", "127.0.0.1")
-    # YZ_PORT (core-resolved, settings.ports) wins; TRANSCRIPT_PORT + default for standalone.
-    port = int(os.environ.get("YZ_PORT") or os.environ.get("TRANSCRIPT_PORT") or "9004")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    run_server(app, 9004, host_env="TRANSCRIPT_HOST", port_env="TRANSCRIPT_PORT")
 
 
 if __name__ == "__main__":
